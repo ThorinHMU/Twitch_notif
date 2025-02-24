@@ -1,5 +1,6 @@
 # Default ignored files
 .idea
-/assets/game_img/
-/assets/profil_img/
+/assets/game_img/*
+/assets/profil_img/*
 twitch-notif-config.json
+!.gitignore
