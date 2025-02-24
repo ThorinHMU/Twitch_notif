@@ -1,0 +1,11 @@
+{
+  "general": {
+    "notif_priority": "streamer",
+    "sound_priority": "streamer",
+    "design_priority": "streamer",
+    "sounds": [],
+    "designs": []
+  },
+  "streamer": {},
+  "games": {}
+}
