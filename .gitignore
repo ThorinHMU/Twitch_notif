@@ -2,5 +2,5 @@
 .idea
 /assets/game_img/*
 /assets/profil_img/*
-/twitch-notif-config.json
+twitch-notif-config.json
 !.gitignore
