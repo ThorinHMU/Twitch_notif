@@ -1,6 +1,8 @@
-from PyQt5.QtWidgets import QAbstractButton, QLabel, QWidget, QVBoxLayout
+from PyQt5.QtWidgets import (QAbstractButton, QLabel, QWidget, QVBoxLayout, QGraphicsView, QGraphicsScene,
+                             QGraphicsPixmapItem)
 from PyQt5.QtGui import QPixmap, QPainter, QImage, QColor, QBitmap
-from PyQt5.Qt import Qt, QResizeEvent, QRect, pyqtSignal, QObject, QRegion, QMouseEvent, QKeyEvent
+from PyQt5.Qt import (Qt, QResizeEvent, QRect, pyqtSignal, QObject, QRegion, QMouseEvent, QKeyEvent, pyqtProperty,
+                      QPropertyAnimation)
 import keyboard
 
 
@@ -251,3 +253,66 @@ class NbrSelecteur(QWidget):
 
         self.set_value(value)
         self.clicked.emit()
+
+
+class RotatingWidget(QGraphicsView):
+    def __init__(self, size=50):
+        super().__init__()
+        self.stop = False
+        self.setStyleSheet("border: none; background: transparent")
+
+        pixmap = QPixmap("assets/ui/loading_spinner.png").scaled(size, size, Qt.KeepAspectRatio,
+                                                                              Qt.SmoothTransformation)
+
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+
+        self.pixmap_item = QGraphicsPixmapItem(pixmap)
+        self.pixmap_item.setTransformationMode(Qt.SmoothTransformation)
+
+        self.pixmap_item.setTransformOriginPoint(pixmap.width() / 2, pixmap.height() / 2)
+
+        # Ajouter l'image à la scène
+        self.scene.addItem(self.pixmap_item)
+
+        # Désactiver les barres de scroll
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        # Ajuster la taille de la vue
+        self.setFixedSize(size, size)
+        self.setSceneRect(0, 0, size, size)
+
+        # Initialiser l'angle de rotation
+        self._angle = 0
+
+        # Créer l'animation de rotation
+        self.animation = QPropertyAnimation(self, b"angle")
+        self.animation.setStartValue(360)
+        self.animation.setEndValue(0)
+        self.animation.setDuration(1000)  # 1 seconde pour une rotation complète
+        self.animation.setLoopCount(-1)  # -1 pour une boucle infinie
+
+    def setAngle(self, angle):
+        """Appliquer la rotation à l'image de manière fluide et stable"""
+        if self.stop:
+            if angle < 5 or angle > 355:
+                self.animation.stop()
+                self.stop = False
+        self._angle = angle
+        self.pixmap_item.setRotation(angle)  # Rotation fluide avec QGraphicsItem
+
+    def getAngle(self):
+        return self._angle
+
+    # Définition de la propriété animable avec pyqtProperty
+    angle = pyqtProperty(int, getAngle, setAngle)
+
+    def start_animation(self):
+        """Démarrer l'animation de rotation"""
+        if self.animation.state() == QPropertyAnimation.Stopped:
+            self.animation.start()
+
+    def stop_animation(self):
+        """Arrêter l'animation et remettre l'image droite"""
+        self.stop = True

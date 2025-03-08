@@ -4,3 +4,4 @@
 /assets/profil_img/*
 twitch-notif-config.json
 !.gitignore
+__pycache__

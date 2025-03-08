@@ -1,5 +1,6 @@
 import os
 import json
+from collections import OrderedDict
 
 
 class FileImg:
@@ -36,8 +37,12 @@ class FileConfig:
             json.dump(content, file, indent=2)
 
     def get_streamers(self):
-        streamers = [(streamer, self.file.get("streamer")[streamer]["id"]) for streamer in self.file.get("streamer")]
-        return streamers
+        streamers = [(self.file.get("streamer")[streamer]["id"]) for streamer in self.file.get("streamer")]
+        order = self.file.get("general").get("streamer_order")
+        new_order = order+list(set(streamers)-set(order))
+        if order != new_order:
+            self.edit_config(["general", "streamer_order"], new_order)
+        return new_order
 
     def get_games(self):
         games = [self.file.get("games")[game].get("name") for game in self.file.get("games")]
@@ -64,6 +69,9 @@ class FileConfig:
         content.update(kwargs)
         file["streamer"].update(
             {user_id: content})
+        order: list = self.file.get("general").get("streamer_order")
+        order.append(user_id)
+        file["streamer"]["streamer_order"] = order
         self.write_file(file)
 
     def add_game(self, name, **kwargs):
@@ -92,7 +100,6 @@ class FileConfig:
           "sound_active": False,
           "design_active": False,
           "notif_active": False,
-          "is_active": True
         }
         content.update(kwargs)
         file["streamer"][streamer_id]["games"][name] = content
@@ -127,3 +134,22 @@ class FileConfig:
         for i in range(len(file) - 1, 1, -1):
             file[i - 1][path[i - 1]] = file[i]
         self.write_file(file[0])
+
+    def move(self, streamer_id, sens=1):
+        order: list = self.file.get("general").get("streamer_order")
+        file = self.file
+        if streamer_id not in order:
+            return
+        index = order.index(streamer_id)
+        if sens == 1 and index == len(order) - 1:
+            index = 0
+        elif sens == -1 and index == 0:
+            index = - 1
+        else:
+            index = index + sens
+
+        order.remove(streamer_id)
+        order.insert(index, streamer_id)
+        file["general"]["streamer_order"] = order
+        self.write_file(file)
+

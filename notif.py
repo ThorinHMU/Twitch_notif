@@ -124,7 +124,6 @@ class NotifProgram:
         game_notif_priority = self.config_file.get_config(["games", game_name, "notif_priority"]) or 0
         user_game_notif_active = self.config_file.get_config(["streamer", user_id, "games", game_name, "notif_active"])
         user_game_notif = self.config_file.get_config(["streamer", user_id, "games", game_name, "notif"])
-        user_game_active = self.config_file.get_config(["streamer", user_id, "games", game_name, "is_active"])
         priotity = self.config_file.get_config(["general", "notif_priority"])
 
         notif_enable = False
