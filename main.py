@@ -202,7 +202,17 @@ class GeneralConfigPage(QWidget):
         self.frame_sound.setFixedHeight(300)
 
         self.layout_main_sound = QVBoxLayout()
-        self.layout_content_sound = GridLayout()
+        self.layout_content_sound = QHBoxLayout()
+        self.scroll_area_content_sound = QScrollArea()
+        self.scroll_area_content_sound.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.scroll_area_content_sound.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.scroll_area_content_sound.setWidgetResizable(True)
+
+        self.layout_content_sound.addWidget(self.scroll_area_content_sound)
+        self.grid = HGridLayout()
+        self.widget = QWidget()
+        self.scroll_area_content_sound.setWidget(self.widget)
+        self.widget.setLayout(self.grid)
 
         self.layout_main_sound.setContentsMargins(0, 0, 0, 0)
 
@@ -213,21 +223,28 @@ class GeneralConfigPage(QWidget):
         if not self.sounds:
             label = QLabel("Aucun son enregistré")
             label.setStyleSheet("border: None; color: grey; font-size: 30px")
-            self.layout_content_sound.add_element(label)
+            self.grid.add_element(label)
         else:
             for name, path in self.sounds:
                 frame = QFrame()
-                frame.setFixedSize(300, 50)
-                frame.setStyleSheet("border: None")
+                frame.setFixedSize(300, 56)
+                frame.setStyleSheet("border: 2px solid grey;")
                 label_name = QLabel(name, frame)
-                label_name.setStyleSheet("color: white; font-size: 20px")
+                label_name.setStyleSheet("color: white; font-size: 20px; border: None;")
                 label_path = QLabel(path, frame)
-                label_path.setStyleSheet("color: white; font-size: 16px")
-                label_name.setGeometry(0, 0, 300, 25)
-                label_path.setGeometry(0, 25, 300, 25)
+                label_path.setStyleSheet("color: white; font-size: 16px; border: None;")
+                label_name.setGeometry(3, 3, 294, 25)
+                label_path.setGeometry(3, 25, 294, 25)
                 label_name.setAlignment(Qt.AlignCenter)
                 label_path.setAlignment(Qt.AlignCenter)
-                self.layout_content_sound.add_element(frame)
+
+                delete_button = CustomButton(frame, "assets/ui/delete.png", 20)
+                delete_button.move(250, 5)
+
+                edit_button = CustomButton(frame, "assets/ui/edit_button.png", 20)
+                edit_button.move(275, 5)
+
+                self.grid.add_element(frame)
 
         self.add_sound_frame = QFrame()
         self.add_sound_button = CustomButton(self.add_sound_frame, path="assets/ui/add_button.png")
@@ -680,6 +697,55 @@ class GridLayout(QVBoxLayout):
                 self.layouts.pop(-1)
         except Exception as errror:
             print(errror)
+
+
+class HGridLayout(QHBoxLayout):
+    def __init__(self):
+        super().__init__()
+        self.elements: list[QWidget] = []
+        self.layouts: list[QVBoxLayout] = []
+        self._space: list[QLabel] = []
+
+    def add_element(self, widget):
+        index = len(self.elements) % 2
+        if index == 0:
+            layout = QVBoxLayout()
+            layout.addWidget(widget, alignment=Qt.AlignCenter)
+            label = QLabel()
+            label.setStyleSheet("border: None;")
+            label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+            layout.addWidget(label, alignment=Qt.AlignCenter)
+            self.addLayout(layout)
+            self.layouts.append(layout)
+            self._space.append(label)
+        else:
+            label = self._space.pop(0)
+            layout = self.layouts[-1]
+            layout.removeWidget(label)
+            layout.addWidget(widget, alignment=Qt.AlignCenter)
+
+        self.elements.append(widget)
+
+    def remove_element(self, widget):
+        index = self.elements.index(widget)
+        if not index:
+            return
+        self.elements.pop(index)
+        widget.setParent(None)
+
+        for i in range(index // 2 + 1, len(self.layouts)):
+            element = self.elements[i * 2 - 1]
+            self.layouts[i].removeWidget(element)
+            self.layouts[i - 1].addWidget(element, alignment=Qt.AlignCenter)
+        if len(self.elements) % 2:
+            label = QLabel()
+            self.layouts[-1].addWidget(label)
+            self._space.append(label)
+        else:
+            label = self._space.pop(-1)
+            self.layouts[-1].removeWidget(label)
+            self.removeItem(self.layouts[-1])
+            self.layouts.pop(-1)
 
 
 class GameConfigPage(QWidget):
