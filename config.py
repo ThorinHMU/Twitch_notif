@@ -37,7 +37,8 @@ class FileConfig:
             json.dump(content, file, indent=2)
 
     def get_streamers(self):
-        streamers = [(self.file.get("streamer")[streamer]["id"]) for streamer in self.file.get("streamer")]
+        streamers = [streamer for streamer in self.file.get("streamer")]
+        print("ok", streamers)
         order = self.file.get("general").get("streamer_order")
         new_order = order+list(set(streamers)-set(order))
         if order != new_order:
@@ -71,7 +72,7 @@ class FileConfig:
             {user_id: content})
         order: list = self.file.get("general").get("streamer_order")
         order.append(user_id)
-        file["streamer"]["streamer_order"] = order
+        file["general"]["streamer_order"] = order
         self.write_file(file)
 
     def add_game(self, name, **kwargs):

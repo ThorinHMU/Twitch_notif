@@ -180,6 +180,7 @@ class NotifProgram:
 
     def get_profil_img(self, user_id, width=0, height=0):
         params = {"id": user_id}
+        print(params)
         response = self.twitch_req("https://api.twitch.tv/helix/users", params=params)
         data = response.json().get("data")
         icon_url = data[0].get("profile_image_url").format(width=width, height=height)

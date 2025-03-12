@@ -251,7 +251,7 @@ class GeneralConfigPage(QWidget):
         self.add_sound_label = QLabel("Ajouter un son", self.add_sound_frame)
 
         self.add_sound_frame.setFixedHeight(70)
-        self.add_sound_frame.setStyleSheet("boder: None")
+        self.add_sound_frame.setStyleSheet("border: None")
 
         self.add_sound_button.move(10, 10)
 
