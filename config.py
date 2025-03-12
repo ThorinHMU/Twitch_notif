@@ -38,7 +38,6 @@ class FileConfig:
 
     def get_streamers(self):
         streamers = [streamer for streamer in self.file.get("streamer")]
-        print("ok", streamers)
         order = self.file.get("general").get("streamer_order")
         new_order = order+list(set(streamers)-set(order))
         if order != new_order:
