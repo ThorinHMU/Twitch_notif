@@ -4,7 +4,7 @@
     "sound_priority": "streamer",
     "design_priority": "streamer",
     "sounds": [],
-    "designs": [],
+    "styles": {},
     "streamer_order": []
   },
   "streamer": {},
