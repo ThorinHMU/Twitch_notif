@@ -13,9 +13,9 @@ class FileImg:
         else:
             return None
 
-    def get_game_img(self, game_name):
-        if os.path.exists(f"{self.path}/{game_name}.png"):
-            return open(f"{self.path}/{game_name}.png", "rb").read()
+    def get_game_img(self, game_id):
+        if os.path.exists(f"{self.path}/{game_id}.png"):
+            return open(f"{self.path}/{game_id}.png", "rb").read()
         else:
             return None
 
@@ -45,7 +45,7 @@ class FileConfig:
         return new_order
 
     def get_games(self):
-        games = [self.file.get("games")[game].get("name") for game in self.file.get("games")]
+        games = [self.file.get("games")[game].get("id") for game in self.file.get("games")]
         return games
 
     def get_streamer_game(self, streamer_id):
@@ -74,11 +74,12 @@ class FileConfig:
         file["general"]["streamer_order"] = order
         self.write_file(file)
 
-    def add_game(self, name, **kwargs):
+    def add_game(self, game_id, name, **kwargs):
         file = self.file
-        if file.get("games").get(name):
+        if file.get("games").get(game_id):
             return None
-        content = {"name": name,
+        content = {"id": game_id,
+                   "name": name,
                    "sound": 0 if not kwargs.get("sound") else kwargs.get("sound"),
                    "design": 0,
                    "notif": True,
@@ -88,12 +89,14 @@ class FileConfig:
                    }
         content.update(kwargs)
         file["games"].update(
-            {name: content})
+            {game_id: content})
         self.write_file(file)
 
-    def add_streamer_game(self, streamer_id, name, **kwargs):
+    def add_streamer_game(self, streamer_id, game_id, game_name, **kwargs):
         file = self.file
         content = {
+          "id": game_id,
+          "name": game_name,
           "sound": 0,
           "design": 0,
           "notif": True,
@@ -102,7 +105,7 @@ class FileConfig:
           "notif_active": False,
         }
         content.update(kwargs)
-        file["streamer"][streamer_id]["games"][name] = content
+        file["streamer"][streamer_id]["games"][game_id] = content
         self.write_file(file)
 
     def edit_config(self, path, content):

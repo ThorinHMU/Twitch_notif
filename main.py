@@ -1,18 +1,11 @@
-import asyncio
 import os
-import re
-import webbrowser
-from notif import NotifProgram
-import requests
 import sys
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
 import threading
-from ui import *
-import time
+import webbrowser
+
 from config import FileConfig, FileImg
-from collections import OrderedDict
+from notif import NotifProgram
+from ui import *
 from utils import *
 
 
@@ -312,6 +305,7 @@ class GeneralConfigPage(QWidget):
         self.vbox.addStretch()
         self.vbox.addWidget(self.title_style, alignment=Qt.AlignHCenter | Qt.AlignTop)
         self.vbox.addWidget(self.frame_style, 1, alignment=Qt.AlignTop)
+        # self.vbox.addWidget(ChoiceSound(self.my_parent.my_parent.config_file), 1, alignment=Qt.AlignTop)
 
     def add_sound(self):
         self.my_parent.change_config_page(page=self.sound_page)
@@ -325,22 +319,23 @@ class GeneralConfigPage(QWidget):
         self.my_parent.game_button.lock()
         self.my_parent.streamer_button.lock()
 
-    def delete_sound(self, name, path):
-        sounds: list = self.my_parent.my_parent.config_file.get_config(["general", "sounds"])
-        sounds.remove([name, path])
+    def delete_sound(self, name):
+        sounds: dict = self.my_parent.my_parent.config_file.get_config(["general", "sounds"])
+        sounds.pop(name)
         self.my_parent.my_parent.config_file.edit_config(["general", "sounds"], sounds)
         self.load_sounds()
 
     def load_sounds(self):
         self.grid_sound.clear()
 
-        self.sounds = self.my_parent.my_parent.config_file.get_config(["general", "sounds"])
+        self.sounds: dict = self.my_parent.my_parent.config_file.get_config(["general", "sounds"])
         if not self.sounds:
             label = QLabel("Aucun son enregistré")
             label.setStyleSheet("border: None; color: grey; font-size: 30px")
             self.grid_sound.add_element(label)
         else:
-            for name, path in self.sounds:
+            for name in self.sounds.keys():
+                path = self.sounds[name]["path"]
                 frame = QFrame(None)
                 frame.setFixedSize(300, 56)
                 frame.setStyleSheet("border: 2px solid grey;")
@@ -355,11 +350,11 @@ class GeneralConfigPage(QWidget):
                 label_name.setAlignment(Qt.AlignCenter)
                 label_path.setAlignment(Qt.AlignCenter)
                 delete_button = CustomButton(frame, "assets/ui/delete.png", 20)
-                delete_button.clicked.connect(lambda _, fname=name, fpath=path: self.delete_sound(fname, fpath))
+                delete_button.clicked.connect(lambda _, fname=name, fpath=path: self.delete_sound(fname))
                 delete_button.move(250, 5)
 
                 edit_button = CustomButton(frame, "assets/ui/edit_button.png", 20)
-                edit_button.clicked.connect(lambda _, fname=name, fpath=path: self.edit_sound((fname, fpath)))
+                edit_button.clicked.connect(lambda _, fname=name, fpath=path: self.edit_sound(fname))
                 edit_button.move(275, 5)
 
                 self.grid_sound.add_element(frame)
@@ -453,7 +448,6 @@ class AddSoundPage(QWidget):
         self.setLayout(self.layout)
 
     def get_file(self):
-
         dialog = QFileDialog(None)
         dialog.setWindowTitle("Séléctionner un répertoire")
         dialog.setNameFilters(["Fichiers son (*.mp3 *.ogg *.wav *.flac *.aac *.m4a *.wma)"])
@@ -470,8 +464,8 @@ class AddSoundPage(QWidget):
     def valid(self):
         if not re.match(r'^[\wÀ-ÖØ-öø-ÿ- ]{1,32}$', self.sound_name_edit.text()) or not self.path:
             return
-        sounds = self.my_parent.my_parent.my_parent.config_file.get_config(["general", "sounds"])
-        sounds.append([self.sound_name_edit.text(), self.path])
+        sounds: dict = self.my_parent.my_parent.my_parent.config_file.get_config(["general", "sounds"])
+        sounds.update({self.sound_name_edit.text(): {"path": self.path}})
         self.my_parent.my_parent.my_parent.config_file.edit_config(["general", "sounds"], sounds)
         self.__init__(self.my_parent)
         self.my_parent.load_sounds()
@@ -603,9 +597,9 @@ class AddStylePage(QWidget):
 class EditSoundPage(AddSoundPage):
     def __init__(self, my_parent, sound):
         super().__init__(my_parent)
-        self.name, self.path = sound
-        self.sounds: list = self.my_parent.my_parent.my_parent.config_file.get_config(["general", "sounds"])
-        self.index = self.sounds.index([self.name, self.path])
+        self.name = sound
+        self.sounds: dict = self.my_parent.my_parent.my_parent.config_file.get_config(["general", "sounds"])
+        self.path = self.sounds[self.name]["path"]
 
         self.sound_name_edit.setText(self.name)
         self.sound_path_text.setText(self.path)
@@ -613,7 +607,9 @@ class EditSoundPage(AddSoundPage):
     def valid(self):
         if not re.match(r'^[\wÀ-ÖØ-öø-ÿ- ]{1,32}$', self.sound_name_edit.text()) or not self.path:
             return
-        self.sounds[self.index] = [self.sound_name_edit.text(), self.path]
+        if self.name != self.sound_name_edit.text():
+            self.sounds.pop(self.name)
+        self.sounds.update({self.sound_name_edit.text(): {"path": self.sound_path_text.text()}})
         self.my_parent.my_parent.my_parent.config_file.edit_config(["general", "sounds"], self.sounds)
         self.my_parent.load_sounds()
         self.my_parent.my_parent.change_config_page(page=self.my_parent)
@@ -840,13 +836,15 @@ class StreamerBox(QFrame):
         self.sound_label.setStyleSheet("color: white; font-size: 20px; border: none; ")
         self.sound_label.adjustSize()
 
-        self.sound_select_label = QLabel("Pas de son", self.first_frame)
+        sound = self.config_file.get_config(["streamer", self.streamer_id, "sound"])
+        self.sound_select_label = QLabel(sound if sound else "Pas de son", self.first_frame)
         self.sound_select_label.move(280, 95)
         self.sound_select_label.setStyleSheet("color: grey; font-size: 20px; border: none; ")
         self.sound_select_label.adjustSize()
 
         self.sound_select_button = CustomButton(self.first_frame, "assets/ui/choice_sound.png", 30)
         self.sound_select_button.move(400, 95)
+        self.sound_select_button.clicked.connect(self.choice_sound)
 
         self.sound_priority = NbrSelecteur(self.first_frame, 30)
         self.sound_priority.move(515, 95)
@@ -860,13 +858,15 @@ class StreamerBox(QFrame):
         self.design_label.setStyleSheet("color: white; font-size: 20px; border: none; ")
         self.design_label.adjustSize()
 
-        self.design_select_label = QLabel("Pas de style", self.first_frame)
+        design = self.config_file.get_config(["streamer", self.streamer_id, "design"])
+        self.design_select_label = QLabel(design if design else "Pas de style", self.first_frame)
         self.design_select_label.move(280, 135)
         self.design_select_label.setStyleSheet("color: grey; font-size: 20px; border: none; ")
         self.design_select_label.adjustSize()
 
         self.design_select_button = CustomButton(self.first_frame, "assets/ui/choice_style.png", 30)
         self.design_select_button.move(400, 135)
+        self.design_select_button.clicked.connect(self.choice_style)
 
         self.design_priority = NbrSelecteur(self.first_frame, 30)
         self.design_priority.move(515, 135)
@@ -930,6 +930,30 @@ class StreamerBox(QFrame):
         self.thread = None
         self.launch_get_img_game()
 
+    def choice_sound(self, _):
+        page = ChoiceSound(self.config_file)
+        self.my_parent.my_parent.change_config_page(page=page)
+        page.sound_selected.connect(self.set_sound)
+
+    def set_sound(self, sound):
+        config = self.config_file.get_config(["streamer", self.streamer_id])
+        config["sound"] = sound if sound else 0
+        self.config_file.edit_config(["streamer", self.streamer_id], config)
+        self.my_parent.my_parent.change_config_page(page=self.my_parent)
+        self.sound_select_label.setText(sound or "Pas de son")
+
+    def choice_style(self, _):
+        page = ChoiceStyle(self.config_file)
+        self.my_parent.my_parent.change_config_page(page=page)
+        page.style_selected.connect(self.set_style)
+
+    def set_style(self, style):
+        config = self.config_file.get_config(["streamer", self.streamer_id])
+        config["design"] = style if style else 0
+        self.config_file.edit_config(["streamer", self.streamer_id], config)
+        self.my_parent.my_parent.change_config_page(page=self.my_parent)
+        self.design_select_label.setText(style or "Pas de style")
+
     def move_element(self, sens):
         self.config_file.move(self.streamer_id, sens)
         self.my_parent.move_element(self, sens)
@@ -959,20 +983,20 @@ class StreamerBox(QFrame):
         self.thread.start()
 
     def set_img_game(self, images):
-        for game, img_data in images.items():
-            self.add_img_game(game, img_data)
+        for game, (game_name, img_data) in images.items():
+            self.add_img_game(game, game_name, img_data)
         self.vbox.addWidget(QLabel(""), 1)
         self.finish.emit()
 
     def remove_game(self, widget):
-        self.config_file.delete_config(["streamer", widget.streamer_id, "games", widget.game_name])
+        self.config_file.delete_config(["streamer", widget.streamer_id, "games", widget.game_id])
         self.vbox.removeWidget(widget)
         widget.setParent(None)
         self.games_imgs.remove(widget)
-        self.game_page.game_filter.remove(widget.game_name)
+        self.game_page.game_filter.remove(widget.game_id)
 
-    def add_img_game(self, game, img_data):
-        frame = StreamerGameBox(img_data, game, self.config_file, self.streamer_id)
+    def add_img_game(self, game, game_name, img_data):
+        frame = StreamerGameBox(self, img_data, game, game_name, self.config_file, self.streamer_id)
         frame.delete_button.clicked.connect(lambda _, fframe=frame: self.remove_game(fframe))
         frame.setStyleSheet("border-right: 3px solid white; ")
         frame.setFixedHeight(194)
@@ -980,9 +1004,9 @@ class StreamerBox(QFrame):
         self.vbox.insertWidget(len(self.games_imgs) - 1, frame, alignment=Qt.AlignLeft)
 
     def add_new_game(self, data):
-        game, img_data = data
-        self.config_file.add_streamer_game(self.streamer_id, game)
-        self.add_img_game(game, img_data)
+        game_id, name, img_data = data
+        self.config_file.add_streamer_game(self.streamer_id, game_id, name)
+        self.add_img_game(game_id, name, img_data)
 
     def aff_add_game(self):
         self.my_parent.my_parent.general_button.lock()
@@ -1039,13 +1063,14 @@ class LoadImagesGameStreamerThread(QThread):
         images = {}
 
         games = self.config_file.get_streamer_game(self.streamer_id)
-        for game_name in games:
-            img_data = self.profil_img_file.get_game_img(game_name)
+        for game_id in games:
+            game_name = self.config_file.get_config(["streamer", self.streamer_id, game_id, "name"])
+            img_data = self.profil_img_file.get_game_img(game_id)
             if not img_data:
-                img_data = self.notif_programe.get_game_img(game_name)
-                self.profil_img_file.save_profil_img(game_name, img_data)
+                img_data = self.notif_programe.get_game_img(game_id)
+                self.profil_img_file.save_profil_img(game_id, img_data)
 
-            images[game_name] = img_data
+            images[game_id] = [game_name, img_data]
 
         self.images_loaded.emit(images)
 
@@ -1088,16 +1113,16 @@ class GameConfigPage(QWidget):
         all_notif_switch_button.move(250, 0)
         add_game = CustomButton(self.top_frame, "assets/ui/add_button.png")
         add_game.move(50, 0)
-        for game, image_data in images.items():
-            self.add_game(game, image_data)
+        for game, (game_name, image_data) in images.items():
+            self.add_game(game, game_name, image_data)
 
         self.my_parent.game_button.unlock()
         all_notif_switch_button.clicked.connect(self.toogle_all)
         add_game.clicked.connect(self.change_add_game_page)
 
-    def add_game(self, game, img_data):
+    def add_game(self, game, game_name, img_data):
         try:
-            frame = GameGameBox(img_data, game, self.config_file)
+            frame = GameGameBox(self, img_data, game, game_name, self.config_file)
             frame.delete_button.clicked.connect(lambda _, f_frame=frame: self.remove_game(f_frame, game))
             frame.setFixedHeight(200)
             frame.setStyleSheet("border: 3px solid white")
@@ -1123,19 +1148,22 @@ class GameConfigPage(QWidget):
         self.my_parent.change_config_page("add_game")
 
     def add_new_game(self, data):
-        self.config_file.add_game(data[0])
-        self.add_game(data[0], data[1])
+        game_id, name, game_img = data
+        self.config_file.add_game(game_id, name)
+        self.add_game(game_id, name, game_img)
 
 
 class SuperGameBox(QFrame):
-    def __init__(self, img_data, game_name, confil_file):
+    def __init__(self, my_parent, img_data, game_id, game_name, confil_file):
         super().__init__(None)
 
+        self.my_parent = my_parent
         self.setFixedWidth(525)
+        self.config_file: FileConfig = confil_file
 
         self.img_data = img_data
+        self.game_id = game_id
         self.game_name = game_name
-        self.config_file: FileConfig = confil_file
 
         self.label = QLabel(self)
         self.label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -1200,39 +1228,70 @@ class SuperGameBox(QFrame):
 
 
 class GameGameBox(SuperGameBox):
-    def __init__(self, img_data, game_name, confil_file):
-        super().__init__(img_data, game_name, confil_file)
+    def __init__(self, my_parent, img_data, game_id, game_name, confil_file):
+        super().__init__(my_parent, img_data, game_id, game_name, confil_file)
 
         self.notif_switch_button.clicked.connect(lambda state:
-                                                 self.config_file.edit_config(["games", game_name, "notif"],
+                                                 self.config_file.edit_config(["games", self.game_id, "notif"],
                                                                               state))
-        self.notif_switch_button.toogle_state(self.config_file.get_config(["games", game_name, "notif"]))
+        self.notif_switch_button.toogle_state(self.config_file.get_config(["games", self.game_id, "notif"]))
 
         self.notif_priority = NbrSelecteur(self, 30)
         self.notif_priority.move(465, 55)
-        self.notif_priority.set_value(self.config_file.get_config(["games", game_name, "notif_priority"]))
+        self.notif_priority.set_value(self.config_file.get_config(["games", self.game_id, "notif_priority"]))
         self.notif_priority.clicked.connect(lambda:
-                                            self.config_file.edit_config(["games", game_name, "notif_priority"],
+                                            self.config_file.edit_config(["games", self.game_id, "notif_priority"],
                                                                          self.notif_priority.value))
 
         self.sound_priority = NbrSelecteur(self, 30)
         self.sound_priority.move(465, 95)
-        self.sound_priority.set_value(self.config_file.get_config(["games", game_name, "sound_priority"]))
+        self.sound_priority.set_value(self.config_file.get_config(["games", self.game_id, "sound_priority"]))
         self.sound_priority.clicked.connect(lambda:
-                                            self.config_file.edit_config(["games", game_name, "sound_priority"],
+                                            self.config_file.edit_config(["games", self.game_id, "sound_priority"],
                                                                          self.sound_priority.value))
 
         self.design_priority = NbrSelecteur(self, 30)
         self.design_priority.move(465, 135)
-        self.design_priority.set_value(self.config_file.get_config(["games", game_name, "design_priority"]))
+        self.design_priority.set_value(self.config_file.get_config(["games", self.game_id, "design_priority"]))
         self.design_priority.clicked.connect(lambda:
-                                             self.config_file.edit_config(["games", game_name, "design_priority"],
+                                             self.config_file.edit_config(["games", self.game_id, "design_priority"],
                                                                           self.design_priority.value))
+
+        sound = self.config_file.get_config(["games", self.game_id, "sound"])
+        self.sound_select_label.setText(sound or "Pas de son")
+        self.sound_select_button.clicked.connect(self.choice_sound)
+        style = self.config_file.get_config(["games", self.game_id, "design"])
+        self.sound_select_label.setText(style or "Pas de style")
+        self.design_select_button.clicked.connect(self.choice_style)
+
+    def choice_sound(self, _):
+        page = ChoiceSound(self.config_file)
+        self.my_parent.my_parent.change_config_page(page=page)
+        page.sound_selected.connect(self.set_sound)
+
+    def set_sound(self, sound):
+        config = self.config_file.get_config(["games", self.game_id])
+        config["sound"] = sound if sound else 0
+        self.config_file.edit_config(["games", self.game_id], config)
+        self.my_parent.my_parent.change_config_page(page=self.my_parent)
+        self.sound_select_label.setText(sound or "Pas de son")
+
+    def choice_style(self, _):
+        page = ChoiceStyle(self.config_file)
+        self.my_parent.my_parent.change_config_page(page=page)
+        page.style_selected.connect(self.set_style)
+
+    def set_style(self, style):
+        config = self.config_file.get_config(["games", self.game_id])
+        config["design"] = style if style else 0
+        self.config_file.edit_config(["games", self.game_id], config)
+        self.my_parent.my_parent.change_config_page(page=self.my_parent)
+        self.design_select_label.setText(style or "Pas de style")
 
 
 class StreamerGameBox(SuperGameBox):
-    def __init__(self, img_data, game_name, confil_file, streamer_id):
-        super().__init__(img_data, game_name, confil_file)
+    def __init__(self, my_parent, img_data, game_id, game_name, confil_file, streamer_id):
+        super().__init__(my_parent, img_data, game_id, game_name, confil_file)
 
         self.streamer_id = streamer_id
         self.delete_button.move(210, 15)
@@ -1247,55 +1306,86 @@ class StreamerGameBox(SuperGameBox):
         self.nom.setFixedWidth(self.nom_whidth)
 
         self.notif_switch_button.toogle_state(self.config_file.get_config(["streamer", self.streamer_id,
-                                                                           "games", game_name, "notif"]))
+                                                                           "games", self.game_id, "notif"]))
         self.notif_switch_button.clicked.connect(lambda state:
                                                  self.config_file.edit_config(["streamer", self.streamer_id,
-                                                                               "games", game_name, "notif"], state))
+                                                                               "games", self.game_id, "notif"], state))
 
         self.notif_priority = CircleButton(self, 30)
         self.notif_priority.move(465, 55)
         self.notif_priority.toggle_state(self.config_file.get_config(["streamer", self.streamer_id,
-                                                                      "games", game_name, "notif_active"]))
+                                                                      "games", self.game_name, "notif_active"]))
         self.notif_priority.clicked.connect(lambda: self.button_propertie(lambda:
                                                                           self.config_file.edit_config(
                                                                               ["streamer", self.streamer_id, "games",
-                                                                               game_name, "notif_active"],
+                                                                               self.game_id, "notif_active"],
                                                                               self.notif_priority.is_select)))
 
         self.sound_priority = CircleButton(self, 30)
         self.sound_priority.move(465, 95)
         self.sound_priority.toggle_state(self.config_file.get_config(["streamer", self.streamer_id,
-                                                                      "games", game_name, "sound_active"]))
+                                                                      "games", self.game_id, "sound_active"]))
         self.sound_priority.clicked.connect(lambda: self.button_propertie(lambda:
                                                                           self.config_file.edit_config(
                                                                               ["streamer", self.streamer_id, "games",
-                                                                               game_name, "sound_active"],
+                                                                               self.game_id, "sound_active"],
                                                                               self.sound_priority.is_select)))
 
         self.design_priority = CircleButton(self, 30)
         self.design_priority.move(465, 135)
         self.design_priority.toggle_state(self.config_file.get_config(["streamer", self.streamer_id,
-                                                                       "games", game_name, "design_active"]))
+                                                                       "games", self.game_id, "design_active"]))
         self.design_priority.clicked.connect(lambda: self.button_propertie(lambda:
                                                                            self.config_file.edit_config(
                                                                                ["streamer", self.streamer_id, "games",
-                                                                                game_name, "design_active"],
+                                                                                self.game_id, "design_active"],
                                                                                self.design_priority.is_select)))
 
         if True not in [self.notif_priority.is_select, self.sound_priority.is_select, self.design_priority.is_select]:
             self.label.setPixmap(self.greyscale_pixmap)
 
+        sound = self.config_file.get_config(["streamer", self.streamer_id, "games", self.game_id, "sound"])
+        self.sound_select_label.setText(sound or "Pas de son")
+        self.sound_select_button.clicked.connect(self.choice_sound)
+        style = self.config_file.get_config(["streamer", self.streamer_id, "games", self.game_id, "design"])
+        self.sound_select_label.setText(style or "Pas de style")
+        self.design_select_button.clicked.connect(self.choice_style)
+
+    def choice_sound(self, _):
+        page = ChoiceSound(self.config_file)
+        self.my_parent.my_parent.my_parent.change_config_page(page=page)
+        page.sound_selected.connect(self.set_sound)
+
+    def set_sound(self, sound):
+        config = self.config_file.get_config(["streamer", self.streamer_id, "games", self.game_id])
+        config["sound"] = sound if sound else 0
+        self.config_file.edit_config(["streamer", self.streamer_id, "games", self.game_id], config)
+        self.my_parent.my_parent.my_parent.change_config_page(page=self.my_parent.my_parent)
+        self.sound_select_label.setText(sound or "Pas de son")
+
+    def choice_style(self, _):
+        page = ChoiceStyle(self.config_file)
+        self.my_parent.my_parent.my_parent.change_config_page(page=page)
+        page.style_selected.connect(self.set_style)
+
+    def set_style(self, style):
+        config = self.config_file.get_config(["streamer", self.streamer_id, "games", self.game_id])
+        config["design"] = style if style else 0
+        self.config_file.edit_config(["streamer", self.streamer_id, "games", self.game_id], config)
+        self.my_parent.my_parent.my_parent.change_config_page(page=self.my_parent.my_parent)
+        self.design_select_label.setText(style or "Pas de style")
+
     def button_propertie(self, func):
         func()
         if self.notif_priority.is_select == self.sound_priority.is_select == self.design_priority.is_select is False:
-            self.switch_button(False, self.game_name)
+            self.switch_button(False, self.game_id)
         elif [self.notif_priority.is_select, self.sound_priority.is_select,
               self.design_priority.is_select].count(True) == 1:
-            self.switch_button(True, self.game_name)
+            self.switch_button(True, self.game_id)
 
-    def switch_button(self, state, game_name):
+    def switch_button(self, state, game_id):
         self.config_file.edit_config(["streamer", self.streamer_id, "games",
-                                      game_name, "is_active"], state)
+                                      game_id, "is_active"], state)
         if not state:
             self.label.setPixmap(self.greyscale_pixmap)
         else:
@@ -1314,13 +1404,14 @@ class LoadImagesGameThread(QThread):
     def run(self):
         images = {}
         games = self.config_file.get_games()
-        for game_name in games:
-            img_data = self.profil_img_file.get_game_img(game_name)
+        for game_id in games:
+            game_name = self.config_file.get_config(["games", game_id, "name"])
+            img_data = self.profil_img_file.get_game_img(game_id)
             if not img_data:
-                img_data = self.notif_programe.get_game_img(game_name)
-                self.profil_img_file.save_profil_img(game_name, img_data)
+                img_data = self.notif_programe.get_game_img(game_id)
+                self.profil_img_file.save_profil_img(game_id, img_data)
 
-            images[game_name] = img_data
+            images[game_id] = (game_name, img_data)
 
         self.images_loaded.emit(images)
 
@@ -1397,7 +1488,7 @@ class AddGamePage(QWidget):
             return
 
         data = self.config_parent.my_parent.notif_programe.search_game(self.search_game.text())
-        data = list(filter(lambda x: x.get("name") not in self.game_filter, data))
+        data = list(filter(lambda x: x.get("id") not in self.game_filter, data))
         self.thread = LoadImageGameSearch(self.config_parent.my_parent.notif_programe, data)
         self.thread.image_loaded.connect(self.add_game)
         self.thread.start()
@@ -1413,18 +1504,18 @@ class AddGamePage(QWidget):
 
     def add_game(self, data, end):
         frame = AddGameBox(data)
-        frame.add_button.clicked.connect(lambda: self.add_new_game(data[0], data[1]))
+        frame.add_button.clicked.connect(lambda: self.add_new_game(*data))
         self.table[data[0]] = frame
         self.vbox.insertWidget(len(self.table) - 1, frame)
         if end:
             self.vbox.removeWidget(self.load)
             self.load.setParent(None)
 
-    def add_new_game(self, game, img_data):
-        self.game_filter.append(game)
-        self.addgame.emit((game, img_data))
-        self.vbox.removeWidget(self.table.get(game))
-        self.table.get(game).setParent(None)
+    def add_new_game(self, game_id, game_name, img_data):
+        self.game_filter.append(game_id)
+        self.addgame.emit((game_id, game_name, img_data))
+        self.vbox.removeWidget(self.table.get(game_id))
+        self.table.get(game_id).setParent(None)
 
 
 class AddGameBox(QFrame):
@@ -1435,12 +1526,12 @@ class AddGameBox(QFrame):
 
         self.image = QLabel(self)
         pixmap = QPixmap()
-        pixmap.loadFromData(data[1], "")
+        pixmap.loadFromData(data[2], "")
         pixmap = pixmap.scaled(194, 194, Qt.AspectRatioMode.KeepAspectRatio)
         self.image.setPixmap(pixmap)
         self.image.move(0, 0)
 
-        self.label = QLabel(data[0], self)
+        self.label = QLabel(data[1], self)
         self.label.setStyleSheet("color: white; font-size: 50px; border: none")
         self.label.move(175, 10)
         self.label.adjustSize()
@@ -1461,11 +1552,134 @@ class LoadImageGameSearch(QThread):
     def run(self):
         images = {}
         for k, game in enumerate(self.data):
-            game = game.get("name")
-            img_data = self.notif_program.get_game_img(game_name=game)
-            self.image_loaded.emit((game, img_data), k == len(self.data) - 1)
-            images[game] = img_data
+            game_id = game.get("id")
+            game_name = game.get("name")
+            img_data = self.notif_program.get_game_img(game_id=game_id)
+            self.image_loaded.emit((game_id, game_name, img_data), k == len(self.data) - 1)
+            images[game_id] = img_data
         self.images_loaded.emit(images)
+
+
+class ChoiceSound(QWidget):
+    sound_selected = pyqtSignal(str, name="")
+
+    def __init__(self, confil_file):
+        super().__init__()
+        self.config_file: FileConfig = confil_file
+
+        self.setStyleSheet("border: None")
+
+        self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 0)
+
+        self.scrollarea = QScrollArea()
+        self.scrollarea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scrollarea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scrollarea.setWidgetResizable(True)
+        self.scrollarea.setFixedHeight(400)
+        self.scrollarea.setStyleSheet("border: 2px solid black")
+        self.widget = QWidget()
+        self.vbox = HGridLayout()
+
+        self.sounds = self.config_file.get_config(["general", "sounds"])
+
+        frame = QFrame()
+        frame.setFixedSize(300, 150)
+        frame.setStyleSheet("border: 2px solid grey")
+        frame.enterEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: white")
+        frame.leaveEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: grey")
+        frame.mousePressEvent = lambda _: self.select("")
+        label = QLabel("Auncun Son", frame)
+        label.setStyleSheet("font-size: 30px; color: grey; border: None")
+        label.adjustSize()
+        label.move(frame.width()//2-label.width()//2, frame.height()//2-label.height()//2)
+        label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.vbox.add_element(frame)
+
+        for sound in self.sounds.keys():
+            frame = QFrame()
+            frame.setFixedSize(300, 150)
+            frame.setStyleSheet("border: 2px solid grey")
+            frame.enterEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: white")
+            frame.leaveEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: grey")
+            frame.mousePressEvent = lambda _, fsound=sound: self.select(fsound)
+            label = QLabel(sound, frame)
+            label.setStyleSheet("font-size: 30px; color: grey; border: None")
+            label.adjustSize()
+            label.move(frame.width() // 2 - label.width() // 2, frame.height() // 2 - label.height() // 2)
+            label.setAttribute(Qt.WA_TransparentForMouseEvents)
+            self.vbox.add_element(frame)
+
+        self.widget.setLayout(self.vbox)
+        self.scrollarea.setWidget(self.widget)
+
+        self.layout.addWidget(self.scrollarea)
+
+        self.setLayout(self.layout)
+
+    def select(self, sound: str):
+        self.sound_selected.emit(sound)
+
+
+class ChoiceStyle(QWidget):
+    style_selected = pyqtSignal(str, name="")
+
+    def __init__(self, confil_file):
+        super().__init__()
+        self.config_file: FileConfig = confil_file
+
+        self.setStyleSheet("border: None")
+
+        self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 0)
+
+        self.scrollarea = QScrollArea()
+        self.scrollarea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scrollarea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scrollarea.setWidgetResizable(True)
+        self.scrollarea.setFixedHeight(400)
+        self.scrollarea.setStyleSheet("border: 2px solid black")
+        self.widget = QWidget()
+        self.vbox = HGridLayout()
+
+        self.styles = self.config_file.get_config(["general", "styles"])
+
+        frame = QFrame()
+        frame.setFixedSize(300, 150)
+        frame.setStyleSheet("border: 2px solid grey")
+        frame.enterEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: white")
+        frame.leaveEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: grey")
+        frame.mousePressEvent = lambda _: self.select("")
+        label = QLabel("Default", frame)
+        label.setStyleSheet("font-size: 30px; color: grey; border: None")
+        label.adjustSize()
+        label.move(frame.width()//2-label.width()//2, frame.height()//2-label.height()//2)
+        label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.vbox.add_element(frame)
+
+        for style in self.styles.keys():
+            frame = QFrame()
+            frame.setFixedSize(300, 150)
+            frame.setStyleSheet("border: 2px solid grey")
+            frame.enterEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: white")
+            frame.leaveEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: grey")
+            frame.mousePressEvent = lambda _, fstyle=style: self.select(fstyle)
+            label = QLabel(style, frame)
+            label.setStyleSheet("font-size: 30px; color: grey; border: None")
+            label.adjustSize()
+            label.move(frame.width() // 2 - label.width() // 2, frame.height() // 2 - label.height() // 2)
+            label.setAttribute(Qt.WA_TransparentForMouseEvents)
+            self.vbox.add_element(frame)
+
+        self.widget.setLayout(self.vbox)
+        self.scrollarea.setWidget(self.widget)
+
+        self.layout.addWidget(self.scrollarea)
+
+        self.setLayout(self.layout)
+
+    def select(self, style: str):
+        self.style_selected.emit(style)
 
 
 class MainWindows(QMainWindow):

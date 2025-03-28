@@ -54,7 +54,8 @@ class NotifProgram:
                 if self.table_live.get(live.get('user_id')):
                     continue
                 if self.table_live_is_set:
-                    self.notif(live.get("user_id"), live.get("user_name"), live.get("game_name"), live.get("title"))
+                    self.notif(live.get("user_id"), live.get("user_name"), live.get("game_id"), live.get("game_name"),
+                               live.get("title"))
                 self.table_live.update({live.get('user_id'): True})
             if not self.table_live_is_set:
                 self.table_live_is_set = True
@@ -117,14 +118,30 @@ class NotifProgram:
             print(f"Erreur réseau : {e}")
         return None
 
-    def notif(self, user_id, user_name, game_name, title):
+    def notif(self, user_id, user_name, game_id, game_name, title):
         user_notif = self.config_file.get_config(["streamer", user_id, "notif"])
         user_notif_priority = self.config_file.get_config(["streamer", user_id, "notif_priority"])
-        game_notif = self.config_file.get_config(["games", game_name, "notif"])
-        game_notif_priority = self.config_file.get_config(["games", game_name, "notif_priority"]) or 0
-        user_game_notif_active = self.config_file.get_config(["streamer", user_id, "games", game_name, "notif_active"])
-        user_game_notif = self.config_file.get_config(["streamer", user_id, "games", game_name, "notif"])
+        game_notif = self.config_file.get_config(["games", game_id, "notif"])
+        game_notif_priority = self.config_file.get_config(["games", game_id, "notif_priority"]) or 0
+        user_game_notif_active = self.config_file.get_config(["streamer", user_id, "games", game_id, "notif_active"])
+        user_game_notif = self.config_file.get_config(["streamer", user_id, "games", game_id, "notif"])
         priotity = self.config_file.get_config(["general", "notif_priority"])
+
+        style_priority = self.config_file.get_config(["general", "design_priority"])
+        user_style = self.config_file.get_config(["streamer", user_id, "design"])
+        game_style = self.config_file.get_config(["games", game_id, "design"])
+        user_game_style = self.config_file.get_config(["streamer", user_id, "games", game_id, "design"])
+
+        user_style_priority = self.config_file.get_config(["streamer", user_id, "design_priority"])
+        game_style_priority = self.config_file.get_config(["games", game_id, "design_priority"]) or 0
+        user_game_style_active = self.config_file.get_config(["streamer", user_id, "games", game_id, "design_active"])
+
+        if user_style_priority != game_style_priority:
+            style = user_style if user_style_priority >= game_style_priority else game_style
+        else:
+            style = user_style if style_priority == "streamer" else game_style
+        if user_game_style_active:
+            style = user_game_style
 
         notif_enable = False
 
@@ -134,23 +151,43 @@ class NotifProgram:
             notif_enable = user_notif if user_notif_priority > game_notif_priority else game_notif
         elif game_notif_priority == user_notif_priority:
             notif_enable = user_notif if priotity == "streamer" else game_notif if priotity == "game" else priotity
-        if user_game_notif_active and user_game_active:
+        if user_game_notif_active:
             notif_enable = user_game_notif
         if not notif_enable:
             return
 
         self.save_icon("users", {"id": user_id},
                        "profile_image_url", "tempori_user_icon.png")
-        self.save_icon("games", {"name": game_name},
+        self.save_icon("games", {"id": game_id},
                        "box_art_url", "tempori_game_icon.png")
+        self.save_icon("streams", {"id": user_id},
+                       "thumbnail_url", "tempori_stream_icon.png")
+
         user_icon = {'src': self.path + "tempori_user_icon.png",
                      'placement': 'appLogoOverride'}
         game_icon = {'src': self.path + "tempori_game_icon.png"}
 
-        toast(f"{user_name} est en live sur {game_name}",
-              f"{title}",
-              image=user_icon, icon=game_icon, on_click=f'https://www.twitch.tv/{user_name}',
-              audio={"silent": "true"})
+        if style:
+            icons_table = {"Profil du streamer": self.path + "tempori_user_icon.png",
+                           "Image du jeu": self.path + "tempori_game_icon.png",
+                           "Preview du stream": self.path + "tempori_stream_icon.png"}
+
+            style = self.config_file.get_config(["general", "styles"]).get(style)
+            text: str = style["text"].format(title=title, streamer=user_name, game=game_name)
+            icon = icons_table.get(style["little_icon"])
+
+            user_icon = {'src': icon,
+                         'placement': 'appLogoOverride'} if icon else None
+            img = icons_table.get(style["img"])
+            game_icon = {'src': img} if img else None
+
+            toast(text,
+                  image=user_icon, icon=game_icon, on_click=f'https://www.twitch.tv/{user_name}',
+                  audio={"silent": "true"})
+        else:
+            toast(f"{user_name} est en live sur {game_name}{title}",
+                  image=user_icon, icon=game_icon, on_click=f'https://www.twitch.tv/{user_name}',
+                  audio={"silent": "true"})
 
     def refresh_access_token(self) -> str | None:
         params = {"refresh_token": self.refresh_token}
@@ -187,9 +224,9 @@ class NotifProgram:
         response = requests.get(icon_url)
         return response.content
 
-    def get_game_img(self, game_name=None, width=0, height=0, url=None):
-        if game_name:
-            params = {"name": game_name}
+    def get_game_img(self, game_id=None, width=0, height=0, url=None):
+        if game_id:
+            params = {"id": game_id}
             response = self.twitch_req("https://api.twitch.tv/helix/games", params=params)
             data = response.json().get("data")
             icon_url = data[0].get("box_art_url").format(width=width, height=height)
