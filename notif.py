@@ -11,6 +11,8 @@ from config import FileConfig
 import time
 import datetime
 import secrets
+from pydub import AudioSegment
+import pyaudio
 
 
 class NotifProgram:
@@ -27,6 +29,7 @@ class NotifProgram:
         self.table_live_is_set = False
         self.in_live = {}
         self.old_in_live = {}
+        self.playing = False
 
     def loop_notif(self):
         self.access_token, self.refresh_token = self.get_access_token()
@@ -54,8 +57,11 @@ class NotifProgram:
                 if self.table_live.get(live.get('user_id')):
                     continue
                 if self.table_live_is_set:
-                    self.notif(live.get("user_id"), live.get("user_name"), live.get("game_id"), live.get("game_name"),
-                               live.get("title"))
+                    try:
+                        self.notif(live.get("user_id"), live.get("user_name"), live.get("game_id"), live.get("game_name"),
+                                   live.get("title"))
+                    except Exception as er:
+                        print(er)
                 self.table_live.update({live.get('user_id'): True})
             if not self.table_live_is_set:
                 self.table_live_is_set = True
@@ -127,22 +133,6 @@ class NotifProgram:
         user_game_notif = self.config_file.get_config(["streamer", user_id, "games", game_id, "notif"])
         priotity = self.config_file.get_config(["general", "notif_priority"])
 
-        style_priority = self.config_file.get_config(["general", "design_priority"])
-        user_style = self.config_file.get_config(["streamer", user_id, "design"])
-        game_style = self.config_file.get_config(["games", game_id, "design"])
-        user_game_style = self.config_file.get_config(["streamer", user_id, "games", game_id, "design"])
-
-        user_style_priority = self.config_file.get_config(["streamer", user_id, "design_priority"])
-        game_style_priority = self.config_file.get_config(["games", game_id, "design_priority"]) or 0
-        user_game_style_active = self.config_file.get_config(["streamer", user_id, "games", game_id, "design_active"])
-
-        if user_style_priority != game_style_priority:
-            style = user_style if user_style_priority >= game_style_priority else game_style
-        else:
-            style = user_style if style_priority == "streamer" else game_style
-        if user_game_style_active:
-            style = user_game_style
-
         notif_enable = False
 
         if user_notif == game_notif:
@@ -156,23 +146,60 @@ class NotifProgram:
         if not notif_enable:
             return
 
+        style_priority = self.config_file.get_config(["general", "design_priority"])
+        user_style = self.config_file.get_config(["streamer", user_id, "style"])
+        game_style = self.config_file.get_config(["games", game_id, "style"])
+        user_game_style = self.config_file.get_config(["streamer", user_id, "games", game_id, "style"])
+
+        user_style_priority = self.config_file.get_config(["streamer", user_id, "style_priority"])
+        game_style_priority = self.config_file.get_config(["games", game_id, "style_priority"]) or 0
+        user_game_style_active = self.config_file.get_config(["streamer", user_id, "games", game_id, "style_active"])
+
+        if user_style_priority != game_style_priority:
+            style = user_style if user_style_priority >= game_style_priority else game_style
+        else:
+            style = user_style if style_priority == "streamer" else game_style
+        if user_game_style_active:
+            style = user_game_style
+
+        sound_priority = self.config_file.get_config(["general", "sound_priority"])
+        user_sound = self.config_file.get_config(["streamer", user_id, "sound"])
+        game_sound = self.config_file.get_config(["games", game_id, "sound"])
+        user_game_sound = self.config_file.get_config(["streamer", user_id, "games", game_id, "sound"])
+
+        user_sound_priority = self.config_file.get_config(["streamer", user_id, "sound_priority"])
+        game_sound_priority = self.config_file.get_config(["games", game_id, "sound_priority"]) or 0
+        user_game_sound_active = self.config_file.get_config(["streamer", user_id, "games", game_id, "sound_active"])
+
+        if user_sound_priority != game_sound_priority:
+            sound = user_sound if user_sound_priority >= game_sound_priority else game_sound
+        else:
+            sound = user_sound if sound_priority == "streamer" else game_sound
+        if user_game_sound_active:
+            sound = user_game_sound
+
         self.save_icon("users", {"id": user_id},
                        "profile_image_url", "tempori_user_icon.png")
         self.save_icon("games", {"id": game_id},
                        "box_art_url", "tempori_game_icon.png")
-        self.save_icon("streams", {"id": user_id},
+        self.save_icon("streams", {"user_id": user_id},
                        "thumbnail_url", "tempori_stream_icon.png")
 
         user_icon = {'src': self.path + "tempori_user_icon.png",
                      'placement': 'appLogoOverride'}
         game_icon = {'src': self.path + "tempori_game_icon.png"}
 
+        args = {"title": f"{user_name} est en live sur {game_name}{title}",
+                  "image": user_icon, "icon": game_icon, "on_click": f'https://www.twitch.tv/{user_name}',
+                  "audio": {"silent": "true"}}
+
+        if style:
+            style = self.config_file.get_config(["general", "styles"]).get(style)
+
         if style:
             icons_table = {"Profil du streamer": self.path + "tempori_user_icon.png",
                            "Image du jeu": self.path + "tempori_game_icon.png",
                            "Preview du stream": self.path + "tempori_stream_icon.png"}
-
-            style = self.config_file.get_config(["general", "styles"]).get(style)
             text: str = style["text"].format(title=title, streamer=user_name, game=game_name)
             icon = icons_table.get(style["little_icon"])
 
@@ -180,14 +207,58 @@ class NotifProgram:
                          'placement': 'appLogoOverride'} if icon else None
             img = icons_table.get(style["img"])
             game_icon = {'src': img} if img else None
+            args = {"title": text, "image": user_icon, "icon": game_icon,
+                    "on_click": f'https://www.twitch.tv/{user_name}', "audio": {"silent": "true"}}
+        if sound:
+            sound = self.config_file.get_config(["general", "sounds"]).get(sound)
+            if sound:
+                if os.path.exists(sound["path"]):
+                    self.play_sound(sound)
+                else:
+                    print(f"< {sound} > n'est pas valide.")
+        toast(**args)
+        if self.playing:
+            self.stop_sound()
 
-            toast(text,
-                  image=user_icon, icon=game_icon, on_click=f'https://www.twitch.tv/{user_name}',
-                  audio={"silent": "true"})
-        else:
-            toast(f"{user_name} est en live sur {game_name}{title}",
-                  image=user_icon, icon=game_icon, on_click=f'https://www.twitch.tv/{user_name}',
-                  audio={"silent": "true"})
+    def play_sound(self, sound):
+        if self.playing:
+            self.stop_sound()
+
+        def _play():
+            self.playing = True
+            audio = AudioSegment.from_file(sound["path"])
+            audio = audio
+            audio += 15
+
+            p = pyaudio.PyAudio()
+            stream = p.open(format=p.get_format_from_width(audio.sample_width),
+                            channels=audio.channels,
+                            rate=audio.frame_rate,
+                            output=True)
+
+            chunk_size = 1024
+            data = audio.raw_data
+
+            i = 0
+            while i < len(data) and self.playing:
+                chunk = data[i:i+chunk_size]
+                stream.write(chunk)
+                i += chunk_size
+
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+            self.playing = False
+
+        self.thread = threading.Thread(target=_play)
+        self.thread.start()
+
+    def stop_sound(self):
+        if self.playing:
+            print("Arrêt demandé.")
+            self.playing = False
+            if self.thread:
+                self.thread.join()
 
     def refresh_access_token(self) -> str | None:
         params = {"refresh_token": self.refresh_token}

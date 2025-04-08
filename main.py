@@ -9,6 +9,21 @@ from ui import *
 from utils import *
 
 
+def delete_soundstyle(name, s_id, config_file):
+    games = config_file.get_config(["games"])
+    for game in config_file.get_games():
+        if games[game][name] == str(s_id):
+            config_file.edit_config(["games", game, name], 0)
+    streamers = config_file.get_config(["streamer"])
+    for streamer in config_file.get_streamers():
+        if streamers[streamer][name] == str(s_id):
+            config_file.edit_config(["streamer", streamer, name], 0)
+        for game in streamers[streamer]["games"]:
+            if streamers[streamer]["games"][game][name] == str(s_id):
+                config_file.edit_config(
+                    ["streamer", streamer, "games", game, name], 0)
+
+
 class ConnectPage(QWidget):
     clicked = pyqtSignal(name="")
 
@@ -319,10 +334,11 @@ class GeneralConfigPage(QWidget):
         self.my_parent.game_button.lock()
         self.my_parent.streamer_button.lock()
 
-    def delete_sound(self, name):
+    def delete_sound(self, sound_id):
         sounds: dict = self.my_parent.my_parent.config_file.get_config(["general", "sounds"])
-        sounds.pop(name)
+        sounds.pop(sound_id)
         self.my_parent.my_parent.config_file.edit_config(["general", "sounds"], sounds)
+        delete_soundstyle("sound", sound_id, self.my_parent.my_parent.config_file)
         self.load_sounds()
 
     def load_sounds(self):
@@ -334,8 +350,9 @@ class GeneralConfigPage(QWidget):
             label.setStyleSheet("border: None; color: grey; font-size: 30px")
             self.grid_sound.add_element(label)
         else:
-            for name in self.sounds.keys():
-                path = self.sounds[name]["path"]
+            for sound_id in self.sounds.keys():
+                path = self.sounds[sound_id]["path"]
+                name = self.sounds[sound_id]["name"]
                 frame = QFrame(None)
                 frame.setFixedSize(300, 56)
                 frame.setStyleSheet("border: 2px solid grey;")
@@ -350,11 +367,11 @@ class GeneralConfigPage(QWidget):
                 label_name.setAlignment(Qt.AlignCenter)
                 label_path.setAlignment(Qt.AlignCenter)
                 delete_button = CustomButton(frame, "assets/ui/delete.png", 20)
-                delete_button.clicked.connect(lambda _, fname=name, fpath=path: self.delete_sound(fname))
+                delete_button.clicked.connect(lambda _, fname=sound_id: self.delete_sound(fname))
                 delete_button.move(250, 5)
 
                 edit_button = CustomButton(frame, "assets/ui/edit_button.png", 20)
-                edit_button.clicked.connect(lambda _, fname=name, fpath=path: self.edit_sound(fname))
+                edit_button.clicked.connect(lambda _, fname=sound_id: self.edit_sound(fname))
                 edit_button.move(275, 5)
 
                 self.grid_sound.add_element(frame)
@@ -371,10 +388,11 @@ class GeneralConfigPage(QWidget):
         self.my_parent.game_button.lock()
         self.my_parent.streamer_button.lock()
 
-    def delete_style(self, name):
+    def delete_style(self, style_id):
         styles: dict = self.my_parent.my_parent.config_file.get_config(["general", "styles"])
-        styles.pop(name)
+        styles.pop(style_id)
         self.my_parent.my_parent.config_file.edit_config(["general", "styles"], styles)
+        delete_soundstyle("style", style_id, self.my_parent.my_parent.config_file)
         self.load_styles()
 
     def load_styles(self):
@@ -386,22 +404,21 @@ class GeneralConfigPage(QWidget):
             label.setStyleSheet("border: None; color: grey; font-size: 30px")
             self.grid_style.add_element(label)
         else:
-            for items in self.styles.items():
-                name = items[0]
+            for style_id, content in self.styles.items():
                 frame = QFrame(None)
                 frame.setFixedSize(300, 56)
                 frame.setStyleSheet("border: 2px solid grey;")
-                label_name = QLineEdit(name, frame)
+                label_name = QLineEdit(content["name"], frame)
                 label_name.setReadOnly(True)
                 label_name.setStyleSheet("color: white; font-size: 20px; border: None;")
                 label_name.setGeometry(3, 3, 240, 30)
                 label_name.setAlignment(Qt.AlignCenter)
                 delete_button = CustomButton(frame, "assets/ui/delete.png", 20)
-                delete_button.clicked.connect(lambda _, fname=name: self.delete_style(fname))
+                delete_button.clicked.connect(lambda _, fid=style_id: self.delete_style(fid))
                 delete_button.move(250, 5)
 
                 edit_button = CustomButton(frame, "assets/ui/edit_button.png", 20)
-                edit_button.clicked.connect(lambda _, fname=name: self.edit_style(fname))
+                edit_button.clicked.connect(lambda _, fid=style_id: self.edit_style(fid))
                 edit_button.move(275, 5)
 
                 self.grid_style.add_element(frame)
@@ -457,7 +474,8 @@ class AddSoundPage(QWidget):
         if dialog.exec_() == QFileDialog.Accepted:
             directory = dialog.selectedFiles()[0]
             self.path = directory
-            self.sound_path_text.setText(directory.split("/")[-1])
+            print(self.path)
+            self.sound_path_text.setText(directory)
         else:
             return
 
@@ -465,7 +483,8 @@ class AddSoundPage(QWidget):
         if not re.match(r'^[\wÀ-ÖØ-öø-ÿ- ]{1,32}$', self.sound_name_edit.text()) or not self.path:
             return
         sounds: dict = self.my_parent.my_parent.my_parent.config_file.get_config(["general", "sounds"])
-        sounds.update({self.sound_name_edit.text(): {"path": self.path}})
+        sound_id = max([int(sound_id) for sound_id in sounds.keys()]) if sounds else 0
+        sounds.update({sound_id + 1: {"path": self.path, "name": self.sound_name_edit.text()}})
         self.my_parent.my_parent.my_parent.config_file.edit_config(["general", "sounds"], sounds)
         self.__init__(self.my_parent)
         self.my_parent.load_sounds()
@@ -569,9 +588,10 @@ class AddStylePage(QWidget):
                 self.enter_name.text() in styles.keys() or
                 self.selecter_choice_icon.currentIndex() == 4 or self.selecter_choice_img.currentIndex() == 4):
             return
-
-        style = {self.enter_name.text():
-                 {"text": self.enter_text.text(),
+        style_id = max([int(style_id) for style_id in styles.keys()]) if styles else 0
+        style = {style_id + 1:
+                 {"name": self.enter_name.text(),
+                  "text": self.enter_text.text(),
                   "little_icon": self.selecter_choice_icon.currentText(),
                   "little_icon_type": "value" if self.selecter_choice_icon.currentIndex() != 5 else "path",
                   "img": self.selecter_choice_img.currentText(),
@@ -597,9 +617,10 @@ class AddStylePage(QWidget):
 class EditSoundPage(AddSoundPage):
     def __init__(self, my_parent, sound):
         super().__init__(my_parent)
-        self.name = sound
+        self.sound_id = sound
         self.sounds: dict = self.my_parent.my_parent.my_parent.config_file.get_config(["general", "sounds"])
-        self.path = self.sounds[self.name]["path"]
+        self.name = self.sounds[self.sound_id]["name"]
+        self.path = self.sounds[self.sound_id]["path"]
 
         self.sound_name_edit.setText(self.name)
         self.sound_path_text.setText(self.path)
@@ -607,9 +628,8 @@ class EditSoundPage(AddSoundPage):
     def valid(self):
         if not re.match(r'^[\wÀ-ÖØ-öø-ÿ- ]{1,32}$', self.sound_name_edit.text()) or not self.path:
             return
-        if self.name != self.sound_name_edit.text():
-            self.sounds.pop(self.name)
-        self.sounds.update({self.sound_name_edit.text(): {"path": self.sound_path_text.text()}})
+
+        self.sounds.update({self.sound_id: {"path": self.path, "name": self.sound_name_edit.text()}})
         self.my_parent.my_parent.my_parent.config_file.edit_config(["general", "sounds"], self.sounds)
         self.my_parent.load_sounds()
         self.my_parent.my_parent.change_config_page(page=self.my_parent)
@@ -627,11 +647,11 @@ class EditSoundPage(AddSoundPage):
 class EditStylePage(AddStylePage):
     def __init__(self, my_parent, style):
         super().__init__(my_parent)
-        self.name = style
+        self.style_id = style
         self.styles: list = self.my_parent.my_parent.my_parent.config_file.get_config(["general", "styles"])
         self.style: dict = self.styles[style]
 
-        self.enter_name.setText(style)
+        self.enter_name.setText(self.style["name"])
         self.enter_text.setText(self.style["text"])
         if self.style["little_icon"] not in self.choices:
             self.selecter_choice_icon.addItem(self.style["little_icon"])
@@ -645,15 +665,15 @@ class EditStylePage(AddStylePage):
                 not re.match(r'^[\S ]{0,500}$', self.enter_text.text()) or
                 self.selecter_choice_icon.currentIndex() == 4 or self.selecter_choice_img.currentIndex() == 4):
             return
-        style = {self.enter_name.text():
-                 {"text": self.enter_text.text(),
+
+        style = {self.style_id:
+                 {"name": self.enter_name.text(),
+                  "text": self.enter_text.text(),
                   "little_icon": self.selecter_choice_icon.currentText(),
                   "little_icon_type": "value" if self.selecter_choice_icon.currentIndex() != 5 else "path",
                   "img": self.selecter_choice_img.currentText(),
                   "img_type": "value" if self.selecter_choice_img.currentIndex() != 5 else "path"}}
 
-        if self.name != self.enter_name.text():
-            self.styles.pop(self.name)
         self.styles.update(style)
         self.my_parent.my_parent.my_parent.config_file.edit_config(["general", "styles"], self.styles)
         self.my_parent.my_parent.general_button.unlock()
@@ -836,8 +856,10 @@ class StreamerBox(QFrame):
         self.sound_label.setStyleSheet("color: white; font-size: 20px; border: none; ")
         self.sound_label.adjustSize()
 
+        sounds = self.config_file.get_config(["general", "sounds"])
         sound = self.config_file.get_config(["streamer", self.streamer_id, "sound"])
-        self.sound_select_label = QLabel(sound if sound else "Pas de son", self.first_frame)
+        sound = sounds.get(sound)
+        self.sound_select_label = QLabel(sound["name"] if sound else "Pas de son", self.first_frame)
         self.sound_select_label.move(280, 95)
         self.sound_select_label.setStyleSheet("color: grey; font-size: 20px; border: none; ")
         self.sound_select_label.adjustSize()
@@ -858,8 +880,9 @@ class StreamerBox(QFrame):
         self.design_label.setStyleSheet("color: white; font-size: 20px; border: none; ")
         self.design_label.adjustSize()
 
-        design = self.config_file.get_config(["streamer", self.streamer_id, "design"])
-        self.design_select_label = QLabel(design if design else "Pas de style", self.first_frame)
+        designs = self.config_file.get_config(["general", "styles"])
+        design = designs.get(self.config_file.get_config(["streamer", self.streamer_id, "style"]))
+        self.design_select_label = QLabel(design["name"] if design else "Pas de style", self.first_frame)
         self.design_select_label.move(280, 135)
         self.design_select_label.setStyleSheet("color: grey; font-size: 20px; border: none; ")
         self.design_select_label.adjustSize()
@@ -870,9 +893,9 @@ class StreamerBox(QFrame):
 
         self.design_priority = NbrSelecteur(self.first_frame, 30)
         self.design_priority.move(515, 135)
-        self.design_priority.set_value(self.config_file.get_config(["streamer", streamer_id, "design_priority"]))
+        self.design_priority.set_value(self.config_file.get_config(["streamer", streamer_id, "style_priority"]))
         self.design_priority.clicked.connect(lambda:
-                                             self.config_file.edit_config(["streamer", streamer_id, "design_priority"],
+                                             self.config_file.edit_config(["streamer", streamer_id, "style_priority"],
                                                                           self.design_priority.value))
 
         self.frame_add = QFrame(None)
@@ -936,11 +959,13 @@ class StreamerBox(QFrame):
         page.sound_selected.connect(self.set_sound)
 
     def set_sound(self, sound):
+        sounds = self.config_file.get_config(["general", "sounds"])
         config = self.config_file.get_config(["streamer", self.streamer_id])
         config["sound"] = sound if sound else 0
         self.config_file.edit_config(["streamer", self.streamer_id], config)
         self.my_parent.my_parent.change_config_page(page=self.my_parent)
-        self.sound_select_label.setText(sound or "Pas de son")
+        self.sound_select_label.setText(sounds[sound]["name"] if sound else "Pas de son")
+        self.sound_select_label.adjustSize()
 
     def choice_style(self, _):
         page = ChoiceStyle(self.config_file)
@@ -948,11 +973,13 @@ class StreamerBox(QFrame):
         page.style_selected.connect(self.set_style)
 
     def set_style(self, style):
+        designs = self.config_file.get_config(["general", "styles"])
         config = self.config_file.get_config(["streamer", self.streamer_id])
-        config["design"] = style if style else 0
+        config["style"] = style if style else 0
         self.config_file.edit_config(["streamer", self.streamer_id], config)
         self.my_parent.my_parent.change_config_page(page=self.my_parent)
-        self.design_select_label.setText(style or "Pas de style")
+        self.design_select_label.setText(designs[style]["name"] if style else "Pas de style")
+        self.design_select_label.adjustSize()
 
     def move_element(self, sens):
         self.config_file.move(self.streamer_id, sens)
@@ -1252,16 +1279,18 @@ class GameGameBox(SuperGameBox):
 
         self.design_priority = NbrSelecteur(self, 30)
         self.design_priority.move(465, 135)
-        self.design_priority.set_value(self.config_file.get_config(["games", self.game_id, "design_priority"]))
+        self.design_priority.set_value(self.config_file.get_config(["games", self.game_id, "style_priority"]))
         self.design_priority.clicked.connect(lambda:
-                                             self.config_file.edit_config(["games", self.game_id, "design_priority"],
+                                             self.config_file.edit_config(["games", self.game_id, "style_priority"],
                                                                           self.design_priority.value))
-
+        sounds = self.config_file.get_config(["general", "sounds"])
         sound = self.config_file.get_config(["games", self.game_id, "sound"])
-        self.sound_select_label.setText(sound or "Pas de son")
+        sound = sounds.get(sound)
+        self.sound_select_label.setText(sound["name"] if sound else "Pas de son")
         self.sound_select_button.clicked.connect(self.choice_sound)
-        style = self.config_file.get_config(["games", self.game_id, "design"])
-        self.sound_select_label.setText(style or "Pas de style")
+        styles = self.config_file.get_config(["general", "styles"])
+        style = styles.get(self.config_file.get_config(["games", self.game_id, "style"]))
+        self.design_select_label.setText(style["name"] if style else "Pas de style")
         self.design_select_button.clicked.connect(self.choice_style)
 
     def choice_sound(self, _):
@@ -1274,7 +1303,11 @@ class GameGameBox(SuperGameBox):
         config["sound"] = sound if sound else 0
         self.config_file.edit_config(["games", self.game_id], config)
         self.my_parent.my_parent.change_config_page(page=self.my_parent)
-        self.sound_select_label.setText(sound or "Pas de son")
+        sounds = self.config_file.get_config(["general", "sounds"])
+        sound = self.config_file.get_config(["games", self.game_id, "sound"])
+        sound = sounds.get(sound)
+        self.sound_select_label.setText(sound["name"] if sound else "Pas de son")
+        self.sound_select_label.adjustSize()
 
     def choice_style(self, _):
         page = ChoiceStyle(self.config_file)
@@ -1283,10 +1316,13 @@ class GameGameBox(SuperGameBox):
 
     def set_style(self, style):
         config = self.config_file.get_config(["games", self.game_id])
-        config["design"] = style if style else 0
+        config["style"] = style if style else 0
         self.config_file.edit_config(["games", self.game_id], config)
         self.my_parent.my_parent.change_config_page(page=self.my_parent)
-        self.design_select_label.setText(style or "Pas de style")
+        styles = self.config_file.get_config(["general", "styles"])
+        style = styles.get(self.config_file.get_config(["games", self.game_id, "style"]))
+        self.design_select_label.setText(style["name"] if style else "Pas de style")
+        self.design_select_label.adjustSize()
 
 
 class StreamerGameBox(SuperGameBox):
@@ -1314,7 +1350,7 @@ class StreamerGameBox(SuperGameBox):
         self.notif_priority = CircleButton(self, 30)
         self.notif_priority.move(465, 55)
         self.notif_priority.toggle_state(self.config_file.get_config(["streamer", self.streamer_id,
-                                                                      "games", self.game_name, "notif_active"]))
+                                                                      "games", self.game_id, "notif_active"]))
         self.notif_priority.clicked.connect(lambda: self.button_propertie(lambda:
                                                                           self.config_file.edit_config(
                                                                               ["streamer", self.streamer_id, "games",
@@ -1334,21 +1370,23 @@ class StreamerGameBox(SuperGameBox):
         self.design_priority = CircleButton(self, 30)
         self.design_priority.move(465, 135)
         self.design_priority.toggle_state(self.config_file.get_config(["streamer", self.streamer_id,
-                                                                       "games", self.game_id, "design_active"]))
+                                                                       "games", self.game_id, "style_active"]))
         self.design_priority.clicked.connect(lambda: self.button_propertie(lambda:
                                                                            self.config_file.edit_config(
                                                                                ["streamer", self.streamer_id, "games",
-                                                                                self.game_id, "design_active"],
+                                                                                self.game_id, "style_active"],
                                                                                self.design_priority.is_select)))
 
         if True not in [self.notif_priority.is_select, self.sound_priority.is_select, self.design_priority.is_select]:
             self.label.setPixmap(self.greyscale_pixmap)
 
-        sound = self.config_file.get_config(["streamer", self.streamer_id, "games", self.game_id, "sound"])
-        self.sound_select_label.setText(sound or "Pas de son")
+        sounds = self.config_file.get_config(["general", "sounds"])
+        sound = sounds.get(self.config_file.get_config(["streamer", self.streamer_id, "games", self.game_id, "sound"]))
+        self.sound_select_label.setText(sound["name"] or "Pas de son")
         self.sound_select_button.clicked.connect(self.choice_sound)
-        style = self.config_file.get_config(["streamer", self.streamer_id, "games", self.game_id, "design"])
-        self.sound_select_label.setText(style or "Pas de style")
+        styles = self.config_file.get_config(["general", "styles"])
+        style = styles.get(self.config_file.get_config(["streamer", self.streamer_id, "games", self.game_id, "style"]))
+        self.design_select_label.setText(style["name"] if style else "Pas de style")
         self.design_select_button.clicked.connect(self.choice_style)
 
     def choice_sound(self, _):
@@ -1357,11 +1395,13 @@ class StreamerGameBox(SuperGameBox):
         page.sound_selected.connect(self.set_sound)
 
     def set_sound(self, sound):
+        sounds = self.config_file.get_config(["general", "sounds"])
         config = self.config_file.get_config(["streamer", self.streamer_id, "games", self.game_id])
         config["sound"] = sound if sound else 0
         self.config_file.edit_config(["streamer", self.streamer_id, "games", self.game_id], config)
         self.my_parent.my_parent.my_parent.change_config_page(page=self.my_parent.my_parent)
-        self.sound_select_label.setText(sound or "Pas de son")
+        self.sound_select_label.setText(sounds[sound]["name"] or "Pas de son")
+        self.sound_select_label.adjustSize()
 
     def choice_style(self, _):
         page = ChoiceStyle(self.config_file)
@@ -1370,10 +1410,13 @@ class StreamerGameBox(SuperGameBox):
 
     def set_style(self, style):
         config = self.config_file.get_config(["streamer", self.streamer_id, "games", self.game_id])
-        config["design"] = style if style else 0
+        config["style"] = style if style else 0
         self.config_file.edit_config(["streamer", self.streamer_id, "games", self.game_id], config)
         self.my_parent.my_parent.my_parent.change_config_page(page=self.my_parent.my_parent)
-        self.design_select_label.setText(style or "Pas de style")
+        styles = self.config_file.get_config(["general", "styles"])
+        style = styles.get(self.config_file.get_config(["streamer", self.streamer_id, "games", self.game_id, "style"]))
+        self.design_select_label.setText(style["name"] if style else "Pas de style")
+        self.design_select_label.adjustSize()
 
     def button_propertie(self, func):
         func()
@@ -1572,7 +1615,7 @@ class ChoiceSound(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(0, 0, 0, 0)
 
-        self.scrollarea = QScrollArea()
+        self.scrollarea = QScrollArea(None)
         self.scrollarea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scrollarea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scrollarea.setWidgetResizable(True)
@@ -1583,7 +1626,7 @@ class ChoiceSound(QWidget):
 
         self.sounds = self.config_file.get_config(["general", "sounds"])
 
-        frame = QFrame()
+        frame = QFrame(None)
         frame.setFixedSize(300, 150)
         frame.setStyleSheet("border: 2px solid grey")
         frame.enterEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: white")
@@ -1597,13 +1640,14 @@ class ChoiceSound(QWidget):
         self.vbox.add_element(frame)
 
         for sound in self.sounds.keys():
-            frame = QFrame()
+            name = self.sounds[sound]["name"]
+            frame = QFrame(None)
             frame.setFixedSize(300, 150)
             frame.setStyleSheet("border: 2px solid grey")
             frame.enterEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: white")
             frame.leaveEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: grey")
             frame.mousePressEvent = lambda _, fsound=sound: self.select(fsound)
-            label = QLabel(sound, frame)
+            label = QLabel(name, frame)
             label.setStyleSheet("font-size: 30px; color: grey; border: None")
             label.adjustSize()
             label.move(frame.width() // 2 - label.width() // 2, frame.height() // 2 - label.height() // 2)
@@ -1633,7 +1677,7 @@ class ChoiceStyle(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(0, 0, 0, 0)
 
-        self.scrollarea = QScrollArea()
+        self.scrollarea = QScrollArea(None)
         self.scrollarea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scrollarea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scrollarea.setWidgetResizable(True)
@@ -1644,7 +1688,7 @@ class ChoiceStyle(QWidget):
 
         self.styles = self.config_file.get_config(["general", "styles"])
 
-        frame = QFrame()
+        frame = QFrame(None)
         frame.setFixedSize(300, 150)
         frame.setStyleSheet("border: 2px solid grey")
         frame.enterEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: white")
@@ -1657,14 +1701,14 @@ class ChoiceStyle(QWidget):
         label.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.vbox.add_element(frame)
 
-        for style in self.styles.keys():
-            frame = QFrame()
+        for style_id, style in self.styles.items():
+            frame = QFrame(None)
             frame.setFixedSize(300, 150)
             frame.setStyleSheet("border: 2px solid grey")
             frame.enterEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: white")
             frame.leaveEvent = lambda _, fframe=frame: fframe.setStyleSheet("border-color: grey")
-            frame.mousePressEvent = lambda _, fstyle=style: self.select(fstyle)
-            label = QLabel(style, frame)
+            frame.mousePressEvent = lambda _, fstyle=style_id: self.select(fstyle)
+            label = QLabel(style["name"], frame)
             label.setStyleSheet("font-size: 30px; color: grey; border: None")
             label.adjustSize()
             label.move(frame.width() // 2 - label.width() // 2, frame.height() // 2 - label.height() // 2)
